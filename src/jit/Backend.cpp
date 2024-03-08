@@ -30,6 +30,13 @@
 #include <math.h>
 #include <map>
 
+
+#include <iostream>
+#include <fstream>
+#include <unistd.h>
+#include <sys/types.h>
+#include <string.h>
+
 // Inlined platform independent assembler backend.
 extern "C" {
 #include "../../third_party/sljit/sljit_src/sljitLir.c"
@@ -891,6 +898,12 @@ void JITCompiler::generateCode()
 
     void* code = sljit_generate_code(m_compiler);
 
+    int procId = (int)getpid();
+    std::ofstream OutFile("/tmp/perf-"+std::to_string(procId)+".map");
+    std::ofstream tmpFile("map-"+std::to_string(procId)+".txt");
+
+
+
     if (code != nullptr) {
         JITModule* moduleDescriptor = module()->m_jitModule;
 
@@ -924,8 +937,58 @@ void JITCompiler::generateCode()
                     branchList++;
                 } while (branchList < end);
             }
+
+            // for (auto exp : module()->exports()) {
+            //     if(!exp->exportType()==Walrus::ExportType::Function) continue;
+
+            //     if (module()->function(exp->itemIndex())->jitFunction()==it.jitFunc) {
+            //     std::stringstream address, size;
+            //     address << std::hex << sljit_get_label_addr(it.exportEntryLabel);
+            //     size << std::hex << it.exportEntryLabel->size;
+            //         OutFile << "0x" << address.str()
+            //                 << " 0x" << size.str() << " " << exp->name() << std::endl;
+            //         tmpFile << "0x" << address.str() 
+            //                 << " 0x" << size.str() << " " << exp->name() << std::endl;
+            //     }
+            // }
+        }
+        std::stringstream address;
+        sljit_uw start = SLJIT_FUNC_UADDR(code), end = sljit_get_label_addr(m_functionList[0].exportEntryLabel);
+        address << std::hex << start;
+        OutFile << "0x" << address.str()
+                    << " 0x" << (end-start) << " " << "entrypoint" << std::endl;
+        tmpFile << "0x" << address.str() 
+                    << " " << (end-start) << " " << "entrypoint" << std::endl;
+
+        for(size_t i = 0; i < m_functionList.size(); i++) {
+            std::string name = "function" + std::to_string(i);
+            for (auto exp : module()->exports()) {
+                if(exp->exportType()!=Walrus::ExportType::Function) {
+                    continue;
+                }
+                if (module()->function(exp->itemIndex())->jitFunction()==m_functionList[i].jitFunc) {
+                    name = exp->name() + "_" + name;
+                    break;
+                }
+            }
+            std::stringstream address;
+            start = sljit_get_label_addr(m_functionList[i].exportEntryLabel);
+            if (i<m_functionList.size()-1) {
+                end = sljit_get_label_addr(m_functionList[i+1].exportEntryLabel);
+            } else {
+                end = SLJIT_FUNC_UADDR(code) + sljit_get_generated_code_size(m_compiler);
+            }
+            address << std::hex << start;
+            OutFile << "0x" << address.str()
+                    << " 0x" << (end-start) << " " << name << std::endl;
+            tmpFile << "0x" << address.str() 
+                    << " " << (end-start) << " " << name << std::endl;
         }
     }
+
+    tmpFile.close();
+    OutFile.close();
+
 
     sljit_free_compiler(m_compiler);
 }
