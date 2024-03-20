@@ -25,10 +25,12 @@
 #include "runtime/Tag.h"
 #include "jit/Compiler.h"
 #include "jit/SljitLir.h"
+#include "jit/PerfDump.h"
 #include "util/MathOperation.h"
 
 #include <math.h>
 #include <map>
+#include <fcntl.h>
 
 // Inlined platform independent assembler backend.
 extern "C" {
@@ -935,7 +937,27 @@ void JITCompiler::generateCode()
         return;
     }
 
+    std::string tmpName = "/tmp/jit-"+std::to_string(getpid())+".dump";
+    FILE* dumpFile = fopen(tmpName.c_str(), "w");
+    FILE* tmpFile = fopen(("jit-"+std::to_string(getpid())+".dump").c_str(), "w");
+    Perf::FileHeader header(0,62,0);
+    header.totalSize=sizeof(header);
+    fwrite(&header,header.totalSize,1,dumpFile);
+    fwrite(&header,header.totalSize,1,tmpFile);
+
+    int fd = open(tmpName.c_str(), O_RDONLY | O_CLOEXEC, 0);
+    printf("MMAP: %d\n", mmap(NULL, sizeof(header), PROT_READ | PROT_EXEC, MAP_SHARED, fd, 0) != MAP_FAILED);
+    close(fd);
+
     void* code = sljit_generate_code(m_compiler, 0, nullptr);
+
+    sljit_uw funcStart = SLJIT_FUNC_UADDR(code), funcEnd = sljit_get_label_addr(m_functionList[0].exportEntryLabel);
+    std::string _name = "*entryPoint*";
+    Perf::CodeLoad cl(funcStart, (funcEnd-funcStart), _name, (uint8_t*)funcStart);
+    Perf::Record record(Perf::RecordType::JIT_CODE_LOAD, cl);
+
+    record.writeFile(dumpFile);
+    record.writeFile(tmpFile);
 
     if (code != nullptr) {
         JITModule* moduleDescriptor = module()->m_jitModule;
@@ -960,10 +982,10 @@ void JITCompiler::generateCode()
             it.jitFunc->m_exportEntry = reinterpret_cast<void*>(sljit_get_label_addr(it.exportEntryLabel));
 
             if (it.branchTableSize > 0) {
-                sljit_p* branchList = reinterpret_cast<sljit_p*>(it.jitFunc->m_branchList);
+                sljit_up* branchList = reinterpret_cast<sljit_up*>(it.jitFunc->m_branchList);
                 ASSERT(branchList != nullptr);
 
-                sljit_p* end = branchList + it.branchTableSize;
+                sljit_up* end = branchList + it.branchTableSize;
 
                 do {
                     *branchList = sljit_get_label_addr(reinterpret_cast<sljit_label*>(*branchList));
@@ -973,6 +995,33 @@ void JITCompiler::generateCode()
         }
     }
 
+    for (size_t i = 0; i < m_functionList.size(); i++) {
+        std::string name = "function" + std::to_string(i);
+        for (auto exp : module()->exports()) {
+            if (exp->exportType() != Walrus::ExportType::Function) {
+                continue;
+            }
+            if (module()->function(exp->itemIndex())->jitFunction() == m_functionList[i].jitFunc) {
+                name += " " + exp->name();
+                break;
+            }
+        }
+        funcStart = sljit_get_label_addr(m_functionList[i].exportEntryLabel);
+        if (i < m_functionList.size()-1) {
+            funcEnd = sljit_get_label_addr(m_functionList[i+1].exportEntryLabel);
+        } else {
+            funcEnd = SLJIT_FUNC_UADDR(code) + sljit_get_generated_code_size(m_compiler);
+        }
+        cl = Perf::CodeLoad(funcStart, (funcEnd - funcStart), name, (uint8_t*)funcStart);
+        record = Perf::Record(Perf::JIT_CODE_LOAD, cl);
+        record.writeFile(dumpFile);
+        record.writeFile(tmpFile);
+    }
+
+    fclose(tmpFile);
+    fclose(dumpFile);
+    dumpFile = NULL;
+    tmpFile=NULL;
     sljit_free_compiler(m_compiler);
 }
 
@@ -1029,7 +1078,7 @@ void JITCompiler::emitProlog()
     m_context.branchTableOffset = 0;
 
     if (func.branchTableSize > 0) {
-        void* branchList = malloc(func.branchTableSize * sizeof(sljit_p));
+        void* branchList = malloc(func.branchTableSize * sizeof(sljit_up));
 
         func.jitFunc->m_branchList = branchList;
         m_context.branchTableOffset = reinterpret_cast<uintptr_t>(branchList);
