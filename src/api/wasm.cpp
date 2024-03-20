@@ -793,7 +793,7 @@ void wasm_trap_trigger(const char* message, size_t length)
 // Modules
 own wasm_module_t* wasm_module_new(wasm_store_t* store, const wasm_byte_vec_t* binary)
 {
-    auto parseResult = WASMParser::parseBinary(store->get(), std::string(), reinterpret_cast<uint8_t*>(binary->data), binary->size);
+    auto parseResult = WASMParser::parseBinary(store->get(), std::string(), reinterpret_cast<uint8_t*>(binary->data), binary->size, 0);
     if (!parseResult.first.hasValue()) {
         return nullptr;
     }
@@ -802,7 +802,7 @@ own wasm_module_t* wasm_module_new(wasm_store_t* store, const wasm_byte_vec_t* b
 
 bool wasm_module_validate(wasm_store_t* store, const wasm_byte_vec_t* binary)
 {
-    auto parseResult = WASMParser::parseBinary(store->get(), std::string(), reinterpret_cast<uint8_t*>(binary->data), binary->size);
+    auto parseResult = WASMParser::parseBinary(store->get(), std::string(), reinterpret_cast<uint8_t*>(binary->data), binary->size, 0);
     if (!parseResult.first.hasValue()) {
         return false;
     }

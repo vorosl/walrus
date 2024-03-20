@@ -550,8 +550,8 @@ struct CompileContext {
 class JITCompiler {
 public:
     static const uint32_t kHasCondMov = 1 << 0;
+    JITCompiler(Module* module, uint32_t JITFlags);
 
-    JITCompiler(Module* module, int verboseLevel);
 
     ~JITCompiler()
     {
@@ -560,6 +560,7 @@ public:
     }
 
     Module* module() { return m_module; }
+    uint32_t JITFlags() { return m_JITFlags; }
     int verboseLevel() { return m_verboseLevel; }
     uint32_t options() { return m_options; }
     InstructionListItem* first() { return m_first; }
@@ -630,6 +631,7 @@ private:
     size_t m_tryBlockStart;
     // Start inside the instance const data.
     size_t m_tryBlockOffset;
+    uint32_t m_JITFlags;
     int m_verboseLevel;
     uint32_t m_options;
 

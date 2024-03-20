@@ -1993,9 +1993,15 @@ static void compileFunction(JITCompiler* compiler, ModuleFunction* function, Mod
     compiler->compileFunction(jitFunc, true);
 }
 
-void Module::jitCompile(ModuleFunction** functions, size_t functionsLength, int verboseLevel)
+void Module::jitCompile(ModuleFunction** functions, size_t functionsLength, uint32_t JITFlags)
 {
-    JITCompiler compiler(this, verboseLevel);
+    int verboseLevel;
+    if (JITFlags & JITFlagValue::JITVerboseColor) {
+        verboseLevel = 2;
+    } else {
+        verboseLevel = JITFlags & JITFlagValue::JITVerbose;
+    }
+    JITCompiler compiler(this, JITFlags);
 
     if (functionsLength == 0) {
         size_t functionCount = m_functions.size();

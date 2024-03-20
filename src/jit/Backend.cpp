@@ -25,6 +25,9 @@
 #include "runtime/Tag.h"
 #include "jit/Compiler.h"
 #include "jit/SljitLir.h"
+#ifdef WALRUS_JITPERF
+#include "jit/PerfDump.h"
+#endif
 #include "util/MathOperation.h"
 
 #include <math.h>
@@ -650,7 +653,7 @@ void Label::emit(sljit_compiler* compiler)
     addInfo(Label::kHasLabelData);
 }
 
-JITCompiler::JITCompiler(Module* module, int verboseLevel)
+JITCompiler::JITCompiler(Module* module, uint32_t JITFlags)
     : m_first(nullptr)
     , m_last(nullptr)
     , m_compiler(nullptr)
@@ -659,7 +662,7 @@ JITCompiler::JITCompiler(Module* module, int verboseLevel)
     , m_branchTableSize(0)
     , m_tryBlockStart(0)
     , m_tryBlockOffset(0)
-    , m_verboseLevel(verboseLevel)
+    , m_JITFlags(JITFlags)
     , m_options(0)
 {
     if (module->m_jitModule != nullptr) {
@@ -669,6 +672,12 @@ JITCompiler::JITCompiler(Module* module, int verboseLevel)
 
     if (sljit_has_cpu_feature(SLJIT_HAS_CMOV)) {
         m_options |= JITCompiler::kHasCondMov;
+    }
+
+    if (JITFlags & JITFlagValue::JITVerboseColor) {
+        m_verboseLevel = 2;
+    } else {
+        m_verboseLevel = JITFlags & JITFlagValue::JITVerbose;
     }
 }
 
@@ -935,7 +944,24 @@ void JITCompiler::generateCode()
         return;
     }
 
+#ifdef WALRUS_JITPERF
+    const bool perfEnabled = JITFlags() & JITFlagValue::perf;
+    PerfDump pd;
+    if (perfEnabled) {
+        pd.openFile();
+    }
+#endif
+
     void* code = sljit_generate_code(m_compiler, 0, nullptr);
+
+#ifdef WALRUS_JITPERF
+    sljit_uw funcStart, funcEnd;
+    if (perfEnabled) {
+        funcStart = SLJIT_FUNC_UADDR(code);
+        funcEnd = sljit_get_label_addr(m_functionList[0].exportEntryLabel);
+        pd.dumpCodeLoad(funcStart, funcStart, (funcEnd - funcStart), "*entrypoint*", (uint8_t*)funcStart);
+    }
+#endif
 
     if (code != nullptr) {
         JITModule* moduleDescriptor = module()->m_jitModule;
@@ -973,6 +999,29 @@ void JITCompiler::generateCode()
         }
     }
 
+#ifdef WALRUS_JITPERF
+    if (perfEnabled) {
+        for (size_t i = 0; i < m_functionList.size(); i++) {
+            std::string name = "function" + std::to_string(i);
+            for (auto exp : module()->exports()) {
+                if (exp->exportType() != Walrus::ExportType::Function) {
+                    continue;
+                }
+                if (module()->function(exp->itemIndex())->jitFunction() == m_functionList[i].jitFunc) {
+                    name += " " + exp->name();
+                    break;
+                }
+            }
+            funcStart = sljit_get_label_addr(m_functionList[i].exportEntryLabel);
+            if (i < m_functionList.size() - 1) {
+                funcEnd = sljit_get_label_addr(m_functionList[i + 1].exportEntryLabel);
+            } else {
+                funcEnd = SLJIT_FUNC_UADDR(code) + sljit_get_generated_code_size(m_compiler);
+            }
+            pd.dumpCodeLoad(funcStart, funcStart, (funcEnd - funcStart), name, (uint8_t*)funcStart);
+        }
+    }
+#endif
     sljit_free_compiler(m_compiler);
 }
 
