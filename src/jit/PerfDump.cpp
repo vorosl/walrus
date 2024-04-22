@@ -48,7 +48,6 @@
 #endif
 
 
-
 namespace Walrus {
 /* Record types */
 enum RecordType : uint32_t {
@@ -59,15 +58,18 @@ enum RecordType : uint32_t {
     JIT_CODE_UNWINDING_INFO = 4 // record describing a function unwinding information
 };
 
-void PerfDump::openFile()
-{
-    std::string tmpName = "./jit-" + std::to_string(getpid()) + ".dump";
-    this->file = fopen(tmpName.c_str(), "w");
-    this->dumpFileHeader();
+PerfDump::PerfDump(bool isEnabled) : m_pid(getpid()), m_codeLoadIndex(0) {
+    if (isEnabled) {
+        std::string tmpName = "./jit-" + std::to_string(m_pid) + ".dump";
+        this->m_file = fopen(tmpName.c_str(), "w");
+        this->dumpFileHeader();
 
-    int fd = open(tmpName.c_str(), O_RDONLY | O_CLOEXEC, 0);
-    mmap(NULL, 1, PROT_READ | PROT_EXEC, MAP_SHARED, fd, 0);
-    close(fd);
+        int fd = open(tmpName.c_str(), O_RDONLY | O_CLOEXEC, 0);
+        mmap(NULL, 1, PROT_READ | PROT_EXEC, MAP_SHARED, fd, 0);
+        close(fd);
+    } else {
+        this->m_file = nullptr;
+    }
 }
 
 void PerfDump::dumpFileHeader()
@@ -87,12 +89,12 @@ void PerfDump::dumpFileHeader()
         .totalSize = sizeof(uint32_t) * 6 + sizeof(uint64_t) * 2,
         .elfMach = ELFMACH,
         .pad = 0,
-        .pid = (uint32_t)getpid(),
+        .pid = m_pid,
         .timestamp = (uint64_t)std::time(0),
         .flags = 0
     };
 
-    fwrite(&fileHeader, sizeof(fileHeader), 1, file);
+    fwrite(&fileHeader, sizeof(fileHeader), 1, m_file);
 }
 
 void PerfDump::dumpRecordHeader(const uint32_t recordType, const uint32_t entrySize)
@@ -107,7 +109,7 @@ void PerfDump::dumpRecordHeader(const uint32_t recordType, const uint32_t entryS
         .timestamp = (uint64_t)std::time(0)
     };
 
-    fwrite(&recordHeader, sizeof(recordHeader), 1, file);
+    fwrite(&recordHeader, sizeof(recordHeader), 1, m_file);
 }
 
 void PerfDump::dumpCodeLoad(const uint64_t vma, const uint64_t codeAddr, const uint64_t codeSize, const std::string& functionName, const uint8_t* nativeCode)
@@ -120,19 +122,19 @@ void PerfDump::dumpCodeLoad(const uint64_t vma, const uint64_t codeAddr, const u
         const uint64_t codeSize;
         const uint64_t codeLoadIndex;
     } codeLoad1 = {
-        .pid = pid,
+        .pid = m_pid,
         .tid = (uint32_t)std::hash<std::thread::id>{}(std::this_thread::get_id()),
         .vma = vma,
         .codeAddr = codeAddr,
         .codeSize = codeSize,
-        .codeLoadIndex = codeLoadIndex++
+        .codeLoadIndex = m_codeLoadIndex++
     };
     const size_t nameSize = functionName.size() + 1;
 
     dumpRecordHeader(JIT_CODE_LOAD, sizeof(codeLoad1) + nameSize + codeSize);
-    fwrite(&codeLoad1, sizeof(codeLoad1), 1, file);
-    fwrite(functionName.c_str(), nameSize, 1, file);
-    fwrite(nativeCode, codeSize, 1, file);
+    fwrite(&codeLoad1, sizeof(codeLoad1), 1, m_file);
+    fwrite(functionName.c_str(), nameSize, 1, m_file);
+    fwrite(nativeCode, codeSize, 1, m_file);
 }
 
 void PerfDump::dumpCodeMove(const uint64_t vma, const uint64_t oldCodeAddr, const uint64_t newCodeAddr, const uint64_t codeSize, const uint64_t codeIndex)
@@ -146,7 +148,7 @@ void PerfDump::dumpCodeMove(const uint64_t vma, const uint64_t oldCodeAddr, cons
         const uint64_t codeSize;
         const uint64_t codeIndex;
     } codeMove = {
-        .pid = pid,
+        .pid = m_pid,
         .tid = (uint32_t)std::hash<std::thread::id>{}(std::this_thread::get_id()),
         .vma = vma,
         .oldCodeAddr = oldCodeAddr,
@@ -156,7 +158,7 @@ void PerfDump::dumpCodeMove(const uint64_t vma, const uint64_t oldCodeAddr, cons
     };
 
     dumpRecordHeader(JIT_CODE_MOVE, sizeof(codeMove));
-    fwrite(&codeMove, sizeof(codeMove), 1, file);
+    fwrite(&codeMove, sizeof(codeMove), 1, m_file);
 }
 
 void PerfDump::dumpCodeClose()
@@ -166,9 +168,9 @@ void PerfDump::dumpCodeClose()
 
 PerfDump::~PerfDump()
 {
-    if (this->file != nullptr) {
-        this->dumpRecordHeader(JIT_CODE_CLOSE, 0);
-        fclose(this->file);
+    if (this->m_file != nullptr) {
+        this->dumpCodeClose();
+        fclose(this->m_file);
     }
 }
 } // namespace Walrus

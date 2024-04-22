@@ -944,17 +944,13 @@ void JITCompiler::generateCode()
         return;
     }
 
-#ifdef WALRUS_JITPERF
-    const bool perfEnabled = JITFlags() & JITFlagValue::perf;
-    PerfDump pd;
-    if (perfEnabled) {
-        pd.openFile();
-    }
-#endif
-
     void* code = sljit_generate_code(m_compiler, 0, nullptr);
 
 #ifdef WALRUS_JITPERF
+    const bool perfEnabled = JITFlags() & JITFlagValue::perf;
+    PerfDump pd(perfEnabled);
+
+
     sljit_uw funcStart, funcEnd;
     if (perfEnabled) {
         funcStart = SLJIT_FUNC_UADDR(code);

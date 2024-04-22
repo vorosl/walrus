@@ -55,17 +55,17 @@ namespace Walrus {
 
 class PerfDump {
 private:
-    FILE* file = nullptr;
-    uint32_t pid = getpid();
-    uint64_t codeLoadIndex = 0;
+    FILE* m_file;
+    uint32_t m_pid;
+    uint64_t m_codeLoadIndex;
 
 public:
+    PerfDump(bool isEnabled);
     void dumpFileHeader();
     void dumpRecordHeader(const uint32_t recordType, const uint32_t entrySize);
     void dumpCodeLoad(const uint64_t vma, const uint64_t codeAddr, const uint64_t codeSize, const std::string& functionName, const uint8_t* nativeCode);
     void dumpCodeMove(const uint64_t vma, const uint64_t oldCodeAddr, const uint64_t newCodeAddr, const uint64_t codeSize, const uint64_t codeIndex);
     void dumpCodeClose();
-    void openFile();
     ~PerfDump();
 };
 

@@ -1039,12 +1039,16 @@ static void parseArguments(int argc, char* argv[], ParseOptions& options)
                     s_JITFlags |= JITFlagValue::JITVerboseColor;
                     continue;
                 }
-#ifdef WALRUS_JITPERF
                 else if (strcmp(argv[i], "--perf") == 0) {
+#ifdef WALRUS_JITPERF
                     s_JITFlags |= JITFlagValue::perf;
+#else
+                    fprintf(stderr, "error: --perf is not supported in this build\n");
+                    exit(1);
+#endif
                     continue;
                 }
-#endif
+
                 else if (strcmp(argv[i], "--env") == 0) {
                     if (i + 1 == argc || argv[i + 1][0] == '-') {
                         fprintf(stderr, "error: --env requires an argument\n");
