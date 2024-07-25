@@ -440,6 +440,8 @@ static void simdOperandToArg(sljit_compiler* compiler, Operand* operand, JITArg&
 #include "SimdArm64Inl.h"
 #elif (defined SLJIT_CONFIG_ARM_32 && SLJIT_CONFIG_ARM_32)
 #include "SimdArm32Inl.h"
+#elif (defined SLJIT_CONFIG_RISCV_64 && SLJIT_CONFIG_RISCV_64)
+#include "SimdRiscvInl.h"
 #endif /* SLJIT_CONFIG_ARM */
 
 #ifdef HAS_SIMD
