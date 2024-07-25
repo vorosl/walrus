@@ -196,6 +196,8 @@ static void emitSplatSIMD(sljit_compiler* compiler, Instruction* instr)
 
     sljit_s32 type = 0;
 
+    sljit_emit_op0(compiler, SLJIT_BREAKPOINT);
+
     switch (instr->opcode()) {
     case ByteCode::I8X16SplatOpcode:
         type = SLJIT_SIMD_REG_128 | SLJIT_SIMD_ELEM_8;

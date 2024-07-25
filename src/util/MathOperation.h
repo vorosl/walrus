@@ -405,7 +405,7 @@ void resetPrecisionControl(FPControl old_ctrl)
 
 inline double convertUint64ToDouble(uint64_t x)
 {
-#if defined(WALRUS_X86_64)
+#if defined(CPU_X86_64)
     // MSVC on x64 generates uint64 -> float conversions but doesn't do
     // round-to-nearest-ties-to-even, which is required by WebAssembly.
     __m128d result = _mm_setzero_pd();
@@ -437,7 +437,7 @@ inline double convertUint64ToDouble(uint64_t x)
 
 inline float convertUint64ToFloat(uint64_t x)
 {
-#if defined(WALRUS_X86_64)
+#if defined(CPU_X86_64)
     // MSVC on x64 generates uint64 -> float conversions but doesn't do
     // round-to-nearest-ties-to-even, which is required by WebAssembly.
     __m128 result = _mm_setzero_ps();
